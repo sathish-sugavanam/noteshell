@@ -1,4 +1,4 @@
-"""Keyboard-driven terminal view for notes."""
+"""Keyboard-driven terminal view for tasks."""
 
 from datetime import datetime, timedelta, timezone
 import sqlite3
@@ -12,7 +12,7 @@ from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import TextArea
 
-from note import storage
+from task import storage
 
 
 STYLE = Style.from_dict(
@@ -42,24 +42,24 @@ STYLE = Style.from_dict(
 )
 
 
-class InteractiveNotes:
+class InteractiveTasks:
     def __init__(self) -> None:
-        self.notes = [dict(note) for note in storage.list_notes()]
-        for note in self.notes:
-            note["pending_delete"] = False
+        self.tasks = [dict(task) for task in storage.list_tasks()]
+        for task in self.tasks:
+            task["pending_delete"] = False
         self.dirty_ids: set[int] = set()
         self.delete_ids: set[int] = set()
         self.last_added_ids: list[int] = []
-        self.selected_id = self.notes[0]["id"] if self.notes else None
+        self.selected_id = self.tasks[0]["id"] if self.tasks else None
         self.editing = False
-        self.adding_note = False
+        self.adding_task = False
         self.editing_due = False
         self.original_due_text = ""
         self.status_message = ""
         self.editor = TextArea(
             height=1,
             multiline=False,
-            prompt="Note: ",
+            prompt="Task: ",
             wrap_lines=False,
             style="class:editor",
         )
@@ -77,7 +77,7 @@ class InteractiveNotes:
         )
         self.header = Window(
             content=FormattedTextControl(
-                [("class:title", "Notes\n"), ("class:divider", "-----")]
+                [("class:title", "Tasks\n"), ("class:divider", "-----")]
             ),
             height=2,
         )
@@ -98,33 +98,33 @@ class InteractiveNotes:
             full_screen=True,
         )
 
-    def ordered_notes(self) -> list[dict]:
-        pending = [note for note in self.notes if not note["is_completed"]]
-        completed = [note for note in self.notes if note["is_completed"]]
+    def ordered_tasks(self) -> list[dict]:
+        pending = [task for task in self.tasks if not task["is_completed"]]
+        completed = [task for task in self.tasks if task["is_completed"]]
         pending.sort(
-            key=lambda note: (
-                note["due_at"] is None,
-                note["due_at"] or "",
-                note["id"],
+            key=lambda task: (
+                task["due_at"] is None,
+                task["due_at"] or "",
+                task["id"],
             )
         )
         completed.sort(
-            key=lambda note: (note["updated_at"], note["id"]), reverse=True
+            key=lambda task: (task["updated_at"], task["id"]), reverse=True
         )
         return pending + completed
 
-    def selected_note(self) -> dict | None:
+    def selected_task(self) -> dict | None:
         return next(
-            (note for note in self.notes if note["id"] == self.selected_id),
+            (task for task in self.tasks if task["id"] == self.selected_id),
             None,
         )
 
     @staticmethod
-    def is_overdue(note: dict, now: datetime) -> bool:
+    def is_overdue(task: dict, now: datetime) -> bool:
         return bool(
-            not note["is_completed"]
-            and note["due_at"]
-            and datetime.fromisoformat(note["due_at"]).astimezone() < now.astimezone()
+            not task["is_completed"]
+            and task["due_at"]
+            and datetime.fromisoformat(task["due_at"]).astimezone() < now.astimezone()
         )
 
     @staticmethod
@@ -157,21 +157,21 @@ class InteractiveNotes:
         return datetime.fromisoformat(value).astimezone().strftime("%Y-%m-%d %H:%M")
 
     def body_entries(self) -> list[tuple[str, str, int | None]]:
-        notes = self.ordered_notes()
-        if not notes:
+        tasks = self.ordered_tasks()
+        if not tasks:
             return [
-                ("empty", "No notes yet.", None),
-                ("empty", "Press a to add a note.", None),
+                ("empty", "No tasks yet.", None),
+                ("empty", "Press a to add a task.", None),
             ]
 
         now = datetime.now(timezone.utc)
-        overdue = [note for note in notes if self.is_overdue(note, now)]
+        overdue = [task for task in tasks if self.is_overdue(task, now)]
         pending = [
-            note
-            for note in notes
-            if not note["is_completed"] and not self.is_overdue(note, now)
+            task
+            for task in tasks
+            if not task["is_completed"] and not self.is_overdue(task, now)
         ]
-        completed = [note for note in notes if note["is_completed"]]
+        completed = [task for task in tasks if task["is_completed"]]
         entries: list[tuple[str, str, int | None]] = []
 
         for title, kind, group in (
@@ -183,24 +183,24 @@ class InteractiveNotes:
                 continue
             entries.append((f"heading_{kind}", title, None))
             entries.append(("divider", "-" * len(title), None))
-            for note in group:
-                checked = "x" if note["is_completed"] else " "
-                prefix = ">" if note["id"] == self.selected_id else " "
-                text = f"{prefix} [{note['id']}] [{checked}] {note['text']}"
-                if note["due_at"]:
-                    text += f"  |  due {self.due_label(note['due_at'])}"
+            for task in group:
+                checked = "x" if task["is_completed"] else " "
+                prefix = ">" if task["id"] == self.selected_id else " "
+                text = f"{prefix} [{task['id']}] [{checked}] {task['text']}"
+                if task["due_at"]:
+                    text += f"  |  due {self.due_label(task['due_at'])}"
                 style = f"row_{kind}"
-                if note["pending_delete"]:
+                if task["pending_delete"]:
                     style += "_deleted"
-                if note["id"] == self.selected_id:
+                if task["id"] == self.selected_id:
                     style += "_selected"
-                entries.append((style, text, note["id"]))
+                entries.append((style, text, task["id"]))
         return entries
 
     def body_text(self):
         entries = self.body_entries()
         selected_line = next(
-            (index for index, (_, _, note_id) in enumerate(entries) if note_id == self.selected_id),
+            (index for index, (_, _, task_id) in enumerate(entries) if task_id == self.selected_id),
             0,
         )
         rows = max(1, self.application.output.get_size().rows - 5 - 2 * int(self.editing))
@@ -214,7 +214,7 @@ class InteractiveNotes:
     def footer_text(self):
         if self.editing:
             controls = (
-                "Tab switch Note/Due  Enter save  Esc cancel\n"
+                "Tab switch Task/Due  Enter save  Esc cancel\n"
                 "Due format: YYYY-MM-DD HH:MM (leave blank to clear)\n"
             )
         else:
@@ -234,78 +234,78 @@ class InteractiveNotes:
         self.application.invalidate()
 
     def move_selection(self, amount: int) -> None:
-        notes = self.ordered_notes()
-        if not notes:
+        tasks = self.ordered_tasks()
+        if not tasks:
             return
         current = next(
-            (index for index, note in enumerate(notes) if note["id"] == self.selected_id),
+            (index for index, task in enumerate(tasks) if task["id"] == self.selected_id),
             0,
         )
-        next_index = max(0, min(current + amount, len(notes) - 1))
-        self.selected_id = notes[next_index]["id"]
+        next_index = max(0, min(current + amount, len(tasks) - 1))
+        self.selected_id = tasks[next_index]["id"]
         self.status_message = ""
         self.invalidate()
 
     def mark_completed(self) -> None:
-        note = self.selected_note()
-        if note is None:
-            self.status_message = "There are no notes to select."
-        elif note["is_completed"]:
-            self.status_message = "That note is already completed."
-        elif note["pending_delete"]:
+        task = self.selected_task()
+        if task is None:
+            self.status_message = "There are no tasks to select."
+        elif task["is_completed"]:
+            self.status_message = "That task is already completed."
+        elif task["pending_delete"]:
             self.status_message = "Marked for deletion. Press Enter to delete it."
         else:
-            note["is_completed"] = 1
-            note["updated_at"] = storage.now_utc()
-            self.dirty_ids.add(note["id"])
+            task["is_completed"] = 1
+            task["updated_at"] = storage.now_utc()
+            self.dirty_ids.add(task["id"])
             self.status_message = "Marked complete. Press Enter or q to save."
         self.invalidate()
 
     def mark_pending(self) -> None:
-        note = self.selected_note()
-        if note is None:
-            self.status_message = "There are no notes to reopen."
-        elif not note["is_completed"]:
-            self.status_message = "That note is already pending."
+        task = self.selected_task()
+        if task is None:
+            self.status_message = "There are no tasks to reopen."
+        elif not task["is_completed"]:
+            self.status_message = "That task is already pending."
         else:
-            note["is_completed"] = 0
-            note["updated_at"] = storage.now_utc()
-            self.dirty_ids.add(note["id"])
+            task["is_completed"] = 0
+            task["updated_at"] = storage.now_utc()
+            self.dirty_ids.add(task["id"])
             self.status_message = "Marked pending. Press Enter or q to save."
         self.invalidate()
 
     def mark_deleted(self) -> None:
-        note = self.selected_note()
-        if note is None:
-            self.status_message = "There are no notes to delete."
-        elif note["pending_delete"]:
-            self.status_message = "That note is already marked for deletion."
+        task = self.selected_task()
+        if task is None:
+            self.status_message = "There are no tasks to delete."
+        elif task["pending_delete"]:
+            self.status_message = "That task is already marked for deletion."
         else:
-            note["pending_delete"] = True
-            self.delete_ids.add(note["id"])
+            task["pending_delete"] = True
+            self.delete_ids.add(task["id"])
             self.status_message = "Marked for deletion. Press Enter to delete; q cancels."
         self.invalidate()
 
     def begin_edit(self) -> None:
-        note = self.selected_note()
-        if note is None:
-            self.status_message = "There are no notes to edit."
+        task = self.selected_task()
+        if task is None:
+            self.status_message = "There are no tasks to edit."
             self.invalidate()
             return
-        self.adding_note = False
-        self.editor.text = note["text"]
+        self.adding_task = False
+        self.editor.text = task["text"]
         self.editor.buffer.cursor_position = len(self.editor.text)
-        self.due_editor.text = self.edit_due_value(note["due_at"])
+        self.due_editor.text = self.edit_due_value(task["due_at"])
         self.due_editor.buffer.cursor_position = len(self.due_editor.text)
         self.original_due_text = self.due_editor.text
         self.editing_due = False
         self.editing = True
-        self.status_message = "Edit the note or its due date."
+        self.status_message = "Edit the task or its due date."
         self.application.layout.focus(self.editor)
         self.invalidate()
 
     def begin_add(self) -> None:
-        self.adding_note = True
+        self.adding_task = True
         self.editor.text = ""
         self.editor.buffer.cursor_position = 0
         self.due_editor.text = ""
@@ -313,13 +313,13 @@ class InteractiveNotes:
         self.original_due_text = ""
         self.editing_due = False
         self.editing = True
-        self.status_message = "Add a note; a due date is optional."
+        self.status_message = "Add a task; a due date is optional."
         self.application.layout.focus(self.editor)
         self.invalidate()
 
     def cancel_edit(self) -> None:
         self.editing = False
-        self.adding_note = False
+        self.adding_task = False
         self.editing_due = False
         self.status_message = "Edit cancelled."
         self.application.layout.focus(self.body_window)
@@ -336,19 +336,19 @@ class InteractiveNotes:
         if not save_ids and not additions:
             return True
         changes = {
-            note["id"]: (
-                note["text"],
-                note["due_at"],
-                bool(note["is_completed"]),
-                note["id"] in self.delete_ids and not cancel_deletions,
+            task["id"]: (
+                task["text"],
+                task["due_at"],
+                bool(task["is_completed"]),
+                task["id"] in self.delete_ids and not cancel_deletions,
             )
-            for note in self.notes
-            if note["id"] in save_ids
+            for task in self.tasks
+            if task["id"] in save_ids
         }
         try:
-            self.last_added_ids = storage.save_note_changes(changes, additions)
+            self.last_added_ids = storage.save_task_changes(changes, additions)
         except (OSError, sqlite3.Error, ValueError) as error:
-            self.status_message = f"Could not save notes: {error}"
+            self.status_message = f"Could not save tasks: {error}"
             self.invalidate()
             return False
         self.dirty_ids.clear()
@@ -357,19 +357,19 @@ class InteractiveNotes:
 
     def return_to_list(self, preferred_id: int | None, message: str) -> None:
         try:
-            self.notes = [dict(note) for note in storage.list_notes()]
+            self.tasks = [dict(task) for task in storage.list_tasks()]
         except (OSError, sqlite3.Error, ValueError) as error:
             message = f"Saved, but could not refresh the list: {error}"
         else:
-            for note in self.notes:
-                note["pending_delete"] = False
-            if any(note["id"] == preferred_id for note in self.notes):
+            for task in self.tasks:
+                task["pending_delete"] = False
+            if any(task["id"] == preferred_id for task in self.tasks):
                 self.selected_id = preferred_id
             else:
-                ordered = self.ordered_notes()
+                ordered = self.ordered_tasks()
                 self.selected_id = ordered[0]["id"] if ordered else None
         self.editing = False
-        self.adding_note = False
+        self.adding_task = False
         self.status_message = message
         self.application.layout.focus(self.body_window)
         self.invalidate()
@@ -377,13 +377,13 @@ class InteractiveNotes:
     def finish_edit(self) -> None:
         text = self.editor.text.strip()
         if not text:
-            self.status_message = "Note text cannot be empty."
+            self.status_message = "Task text cannot be empty."
             self.invalidate()
             return
         due_text = self.due_editor.text.strip()
-        if not self.adding_note and due_text == self.original_due_text:
-            note = self.selected_note()
-            due_at = note["due_at"] if note is not None else None
+        if not self.adding_task and due_text == self.original_due_text:
+            task = self.selected_task()
+            due_at = task["due_at"] if task is not None else None
         else:
             try:
                 due_at = self.parse_due(due_text) if due_text else None
@@ -396,27 +396,27 @@ class InteractiveNotes:
                 self.editing_due = True
                 self.invalidate()
                 return
-        if self.adding_note:
+        if self.adding_task:
             if self.save_changes(additions=((text, due_at),)):
                 self.return_to_list(
                     self.last_added_ids[-1] if self.last_added_ids else None,
-                    "Added note.",
+                    "Added task.",
                 )
             return
-        note = self.selected_note()
-        if note is None:
-            self.status_message = "That note no longer exists."
+        task = self.selected_task()
+        if task is None:
+            self.status_message = "That task no longer exists."
             self.cancel_edit()
             return
-        if text != note["text"]:
-            note["text"] = text
-            self.dirty_ids.add(note["id"])
-        if due_at != note["due_at"]:
-            note["due_at"] = due_at
-            self.dirty_ids.add(note["id"])
+        if text != task["text"]:
+            task["text"] = text
+            self.dirty_ids.add(task["id"])
+        if due_at != task["due_at"]:
+            task["due_at"] = due_at
+            self.dirty_ids.add(task["id"])
         if not self.save_changes():
             return
-        self.return_to_list(note["id"], "Saved changes.")
+        self.return_to_list(task["id"], "Saved changes.")
 
     def save_and_exit(self, *, cancel_deletions: bool = False) -> None:
         if self.save_changes(cancel_deletions=cancel_deletions):
@@ -488,4 +488,4 @@ class InteractiveNotes:
 
 
 def run_ui() -> None:
-    InteractiveNotes().run()
+    InteractiveTasks().run()

@@ -1,7 +1,7 @@
 [project]
-name = "terminal-note"
+name = "terminal-task"
 version = "0.1.0"
-description = "A keyboard-driven terminal note manager"
+description = "A keyboard-driven terminal task manager"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -10,11 +10,11 @@ dependencies = [
 ]
 
 [project.scripts]
-note = "note.cli:main"
+task = "task.cli:main"
 
 [build-system]
 requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/note"]
+packages = ["src/task"]

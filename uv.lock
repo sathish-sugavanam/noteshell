@@ -85,7 +85,7 @@ wheels = [
 ]
 
 [[package]]
-name = "terminal-note"
+name = "terminal-task"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
