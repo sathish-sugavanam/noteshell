@@ -1,6 +1,6 @@
 """Keyboard-driven terminal view for notes."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import sqlite3
 
 from prompt_toolkit.application import Application
@@ -53,11 +53,20 @@ class InteractiveNotes:
         self.selected_id = self.notes[0]["id"] if self.notes else None
         self.editing = False
         self.adding_note = False
+        self.editing_due = False
+        self.original_due_text = ""
         self.status_message = ""
         self.editor = TextArea(
             height=1,
             multiline=False,
             prompt="Note: ",
+            wrap_lines=False,
+            style="class:editor",
+        )
+        self.due_editor = TextArea(
+            height=1,
+            multiline=False,
+            prompt="Due:  ",
             wrap_lines=False,
             style="class:editor",
         )
@@ -73,7 +82,7 @@ class InteractiveNotes:
             height=2,
         )
         self.edit_container = ConditionalContainer(
-            content=self.editor,
+            content=HSplit([self.editor, self.due_editor]),
             filter=Condition(lambda: self.editing),
         )
         self.footer = Window(
@@ -115,11 +124,36 @@ class InteractiveNotes:
         return bool(
             not note["is_completed"]
             and note["due_at"]
-            and datetime.fromisoformat(note["due_at"]) < now
+            and datetime.fromisoformat(note["due_at"]).astimezone() < now.astimezone()
         )
 
     @staticmethod
     def due_label(value: str) -> str:
+        due = datetime.fromisoformat(value).astimezone()
+        today = datetime.now().astimezone().date()
+        if due.date() == today:
+            date_label = "Today"
+        elif due.date() == today + timedelta(days=1):
+            date_label = "Tomorrow"
+        else:
+            day = due.day
+            suffix = "th" if 11 <= day % 100 <= 13 else {
+                1: "st",
+                2: "nd",
+                3: "rd",
+            }.get(day % 10, "th")
+            date_label = f"{day}{suffix} {due:%B %Y}"
+        return f"{date_label}, {due:%H:%M}"
+
+    @staticmethod
+    def parse_due(value: str) -> str:
+        due = datetime.strptime(value, "%Y-%m-%d %H:%M").astimezone()
+        return due.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+    @staticmethod
+    def edit_due_value(value: str | None) -> str:
+        if not value:
+            return ""
         return datetime.fromisoformat(value).astimezone().strftime("%Y-%m-%d %H:%M")
 
     def body_entries(self) -> list[tuple[str, str, int | None]]:
@@ -169,7 +203,7 @@ class InteractiveNotes:
             (index for index, (_, _, note_id) in enumerate(entries) if note_id == self.selected_id),
             0,
         )
-        rows = max(1, self.application.output.get_size().rows - 5 - int(self.editing))
+        rows = max(1, self.application.output.get_size().rows - 5 - 2 * int(self.editing))
         start = max(0, min(selected_line - rows // 2, len(entries) - rows))
         visible = entries[start : start + rows]
         fragments = []
@@ -178,10 +212,16 @@ class InteractiveNotes:
         return fragments
 
     def footer_text(self):
-        controls = (
-            "Up/Down move  Space complete  u reopen  Tab edit  a add  d delete\n"
-            "Enter save/exit  q save other changes/exit (cancel deletion)\n"
-        )
+        if self.editing:
+            controls = (
+                "Tab switch Note/Due  Enter save  Esc cancel\n"
+                "Due format: YYYY-MM-DD HH:MM (leave blank to clear)\n"
+            )
+        else:
+            controls = (
+                "Up/Down move  Space complete  u reopen  Tab edit  a add  d delete\n"
+                "Enter save/exit  q save other changes/exit (cancel deletion)\n"
+            )
         status = self.status_message
         if self.dirty_ids or self.delete_ids:
             status = f"Unsaved changes. {status}".strip()
@@ -255,8 +295,12 @@ class InteractiveNotes:
         self.adding_note = False
         self.editor.text = note["text"]
         self.editor.buffer.cursor_position = len(self.editor.text)
+        self.due_editor.text = self.edit_due_value(note["due_at"])
+        self.due_editor.buffer.cursor_position = len(self.due_editor.text)
+        self.original_due_text = self.due_editor.text
+        self.editing_due = False
         self.editing = True
-        self.status_message = "Enter saves the edit; Esc cancels it."
+        self.status_message = "Edit the note or its due date."
         self.application.layout.focus(self.editor)
         self.invalidate()
 
@@ -264,14 +308,19 @@ class InteractiveNotes:
         self.adding_note = True
         self.editor.text = ""
         self.editor.buffer.cursor_position = 0
+        self.due_editor.text = ""
+        self.due_editor.buffer.cursor_position = 0
+        self.original_due_text = ""
+        self.editing_due = False
         self.editing = True
-        self.status_message = "Enter saves a new note without a due date; Esc cancels."
+        self.status_message = "Add a note; a due date is optional."
         self.application.layout.focus(self.editor)
         self.invalidate()
 
     def cancel_edit(self) -> None:
         self.editing = False
         self.adding_note = False
+        self.editing_due = False
         self.status_message = "Edit cancelled."
         self.application.layout.focus(self.body_window)
         self.invalidate()
@@ -280,7 +329,7 @@ class InteractiveNotes:
         self,
         *,
         cancel_deletions: bool = False,
-        additions: tuple[str, ...] = (),
+        additions: tuple[tuple[str, str | None], ...] = (),
     ) -> bool:
         self.last_added_ids = []
         save_ids = self.dirty_ids | (set() if cancel_deletions else self.delete_ids)
@@ -289,6 +338,7 @@ class InteractiveNotes:
         changes = {
             note["id"]: (
                 note["text"],
+                note["due_at"],
                 bool(note["is_completed"]),
                 note["id"] in self.delete_ids and not cancel_deletions,
             )
@@ -330,8 +380,24 @@ class InteractiveNotes:
             self.status_message = "Note text cannot be empty."
             self.invalidate()
             return
+        due_text = self.due_editor.text.strip()
+        if not self.adding_note and due_text == self.original_due_text:
+            note = self.selected_note()
+            due_at = note["due_at"] if note is not None else None
+        else:
+            try:
+                due_at = self.parse_due(due_text) if due_text else None
+            except ValueError:
+                self.status_message = (
+                    "Due date must use YYYY-MM-DD HH:MM, "
+                    "for example 2027-05-27 13:30."
+                )
+                self.application.layout.focus(self.due_editor)
+                self.editing_due = True
+                self.invalidate()
+                return
         if self.adding_note:
-            if self.save_changes(additions=(text,)):
+            if self.save_changes(additions=((text, due_at),)):
                 self.return_to_list(
                     self.last_added_ids[-1] if self.last_added_ids else None,
                     "Added note.",
@@ -344,6 +410,9 @@ class InteractiveNotes:
             return
         if text != note["text"]:
             note["text"] = text
+            self.dirty_ids.add(note["id"])
+        if due_at != note["due_at"]:
+            note["due_at"] = due_at
             self.dirty_ids.add(note["id"])
         if not self.save_changes():
             return
@@ -381,6 +450,13 @@ class InteractiveNotes:
         @bindings.add("tab", filter=list_mode)
         def edit(event) -> None:
             self.begin_edit()
+
+        @bindings.add("tab", filter=edit_mode)
+        def switch_edit_field(event) -> None:
+            self.editing_due = not self.editing_due
+            target = self.due_editor if self.editing_due else self.editor
+            self.application.layout.focus(target)
+            self.invalidate()
 
         @bindings.add("a", filter=list_mode)
         def add(event) -> None:

@@ -52,28 +52,36 @@ def open_database():
 
 
 def save_note_changes(
-    changes: dict[int, tuple[str, bool, bool]], additions: tuple[str, ...] = ()
+    changes: dict[int, tuple[str, str | None, bool, bool]],
+    additions: tuple[tuple[str, str | None], ...] = (),
 ) -> list[int]:
     """Save edits, completion states, soft deletions, and new notes together."""
     if not changes and not additions:
         return []
     added_ids = []
     with open_database() as connection:
-        for note_id, (text, is_completed, is_deleted) in changes.items():
+        for note_id, (text, due_at, is_completed, is_deleted) in changes.items():
             timestamp = now_utc()
             cursor = connection.execute(
-                "UPDATE notes SET text = ?, is_completed = ?, updated_at = ?, deleted_at = ? "
+                "UPDATE notes SET text = ?, due_at = ?, is_completed = ?, updated_at = ?, deleted_at = ? "
                 "WHERE id = ? AND deleted_at IS NULL",
-                (text, int(is_completed), timestamp, timestamp if is_deleted else None, note_id),
+                (
+                    text,
+                    due_at,
+                    int(is_completed),
+                    timestamp,
+                    timestamp if is_deleted else None,
+                    note_id,
+                ),
             )
             if cursor.rowcount != 1:
                 raise ValueError(f"note {note_id} no longer exists")
-        for text in additions:
+        for text, due_at in additions:
             timestamp = now_utc()
             cursor = connection.execute(
                 "INSERT INTO notes (text, due_at, created_at, updated_at) "
-                "VALUES (?, NULL, ?, ?)",
-                (text, timestamp, timestamp),
+                "VALUES (?, ?, ?, ?)",
+                (text, due_at, timestamp, timestamp),
             )
             added_ids.append(cursor.lastrowid)
     return added_ids
