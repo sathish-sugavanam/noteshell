@@ -5,15 +5,15 @@ description = "A small terminal note manager with optional due dates"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "prompt-toolkit>=3.0.43,<4",
-    "typer>=0.12.3,<1",
+    "prompt-toolkit==3.0.53",
+    "typer==0.27.2",
 ]
 
 [project.scripts]
 note = "note.cli:main"
 
 [build-system]
-requires = ["hatchling>=1.24,<2"]
+requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

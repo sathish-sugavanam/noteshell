@@ -95,8 +95,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "prompt-toolkit", specifier = ">=3.0.43,<4" },
-    { name = "typer", specifier = ">=0.12.3,<1" },
+    { name = "prompt-toolkit", specifier = "==3.0.53" },
+    { name = "typer", specifier = "==0.27.2" },
 ]
 
 [[package]]
