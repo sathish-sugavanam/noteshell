@@ -53,10 +53,11 @@ def open_database():
 
 def save_note_changes(
     changes: dict[int, tuple[str, bool, bool]], additions: tuple[str, ...] = ()
-) -> None:
+) -> list[int]:
     """Save edits, completion states, soft deletions, and new notes together."""
     if not changes and not additions:
-        return
+        return []
+    added_ids = []
     with open_database() as connection:
         for note_id, (text, is_completed, is_deleted) in changes.items():
             timestamp = now_utc()
@@ -69,11 +70,13 @@ def save_note_changes(
                 raise ValueError(f"note {note_id} no longer exists")
         for text in additions:
             timestamp = now_utc()
-            connection.execute(
+            cursor = connection.execute(
                 "INSERT INTO notes (text, due_at, created_at, updated_at) "
                 "VALUES (?, NULL, ?, ?)",
                 (text, timestamp, timestamp),
             )
+            added_ids.append(cursor.lastrowid)
+    return added_ids
 
 
 def list_notes():

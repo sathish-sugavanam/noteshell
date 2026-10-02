@@ -49,6 +49,7 @@ class InteractiveNotes:
             note["pending_delete"] = False
         self.dirty_ids: set[int] = set()
         self.delete_ids: set[int] = set()
+        self.last_added_ids: list[int] = []
         self.selected_id = self.notes[0]["id"] if self.notes else None
         self.editing = False
         self.adding_note = False
@@ -281,6 +282,7 @@ class InteractiveNotes:
         cancel_deletions: bool = False,
         additions: tuple[str, ...] = (),
     ) -> bool:
+        self.last_added_ids = []
         save_ids = self.dirty_ids | (set() if cancel_deletions else self.delete_ids)
         if not save_ids and not additions:
             return True
@@ -294,7 +296,7 @@ class InteractiveNotes:
             if note["id"] in save_ids
         }
         try:
-            storage.save_note_changes(changes, additions)
+            self.last_added_ids = storage.save_note_changes(changes, additions)
         except (OSError, sqlite3.Error, ValueError) as error:
             self.status_message = f"Could not save notes: {error}"
             self.invalidate()
@@ -302,6 +304,25 @@ class InteractiveNotes:
         self.dirty_ids.clear()
         self.delete_ids.clear()
         return True
+
+    def return_to_list(self, preferred_id: int | None, message: str) -> None:
+        try:
+            self.notes = [dict(note) for note in storage.list_notes()]
+        except (OSError, sqlite3.Error, ValueError) as error:
+            message = f"Saved, but could not refresh the list: {error}"
+        else:
+            for note in self.notes:
+                note["pending_delete"] = False
+            if any(note["id"] == preferred_id for note in self.notes):
+                self.selected_id = preferred_id
+            else:
+                ordered = self.ordered_notes()
+                self.selected_id = ordered[0]["id"] if ordered else None
+        self.editing = False
+        self.adding_note = False
+        self.status_message = message
+        self.application.layout.focus(self.body_window)
+        self.invalidate()
 
     def finish_edit(self) -> None:
         text = self.editor.text.strip()
@@ -311,7 +332,10 @@ class InteractiveNotes:
             return
         if self.adding_note:
             if self.save_changes(additions=(text,)):
-                self.application.exit()
+                self.return_to_list(
+                    self.last_added_ids[-1] if self.last_added_ids else None,
+                    "Added note.",
+                )
             return
         note = self.selected_note()
         if note is None:
@@ -323,7 +347,7 @@ class InteractiveNotes:
             self.dirty_ids.add(note["id"])
         if not self.save_changes():
             return
-        self.application.exit()
+        self.return_to_list(note["id"], "Saved changes.")
 
     def save_and_exit(self, *, cancel_deletions: bool = False) -> None:
         if self.save_changes(cancel_deletions=cancel_deletions):

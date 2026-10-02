@@ -26,9 +26,10 @@ note
 complete it, `u` to return a completed note to pending, Tab to edit it, and `a`
 to add a note without a due date. Press `d` to mark a note for deletion; it is
 struck through until Enter saves the changes and deletes it. Enter also saves a
-new or edited note and exits. `q` saves other changes and exits, cancelling
-marked deletions. Escape cancels the current text edit, and Ctrl+C exits without
-saving staged changes.
+new or edited note and returns to the list. Enter from the list saves staged
+changes and exits. `q` saves other changes and exits, cancelling marked
+deletions. Escape cancels the current text edit, and Ctrl+C exits without saving
+staged changes.
 
 The interactive list groups overdue notes in red, other pending notes in yellow,
 and completed notes in grey. Each group has a heading and divider. Notes with
