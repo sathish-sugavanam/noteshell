@@ -186,9 +186,9 @@ class InteractiveTasks:
             for task in group:
                 checked = "x" if task["is_completed"] else " "
                 prefix = ">" if task["id"] == self.selected_id else " "
-                text = f"{prefix} [{task['id']}] [{checked}] {task['text']}"
+                text = f"{prefix} [{checked}] {task['text']}"
                 if task["due_at"]:
-                    text += f"  |  due {self.due_label(task['due_at'])}"
+                    text += f"  |  Due {self.due_label(task['due_at'])}"
                 style = f"row_{kind}"
                 if task["pending_delete"]:
                     style += "_deleted"
