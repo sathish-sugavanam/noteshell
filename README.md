@@ -6,15 +6,28 @@ local SQLite database.
 
 ## Install
 
-Install [uv](https://docs.astral.sh/uv/) if it is not already available. From
-this project folder, install the command for your user:
+Install [uv](https://docs.astral.sh/uv/) if it is not already available. Install
+the latest version from the project's GitHub repository:
 
 ```sh
-uv tool install --editable .
+uv tool install git+https://github.com/sathish-sugavanam/taskshell.git
 ```
 
 If `task` is not found afterward, follow uv's printed instructions to add its
 tool directory to your `PATH`.
+
+To check for and install a newer version later, run:
+
+```sh
+uv tool upgrade terminal-task
+```
+
+uv checks the installed tool's source and installs an update when one is
+available. To explicitly fetch and reinstall the latest version from GitHub:
+
+```sh
+uv tool install --force git+https://github.com/sathish-sugavanam/taskshell.git
+```
 
 ## Use
 
