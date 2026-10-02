@@ -219,7 +219,7 @@ class InteractiveTasks:
             )
         else:
             controls = (
-                "Up/Down move  Space complete  u reopen  Tab edit  a add  d delete\n"
+                "Up/Down move  Space toggle  Tab edit  a add  d delete\n"
                 "Enter save/exit  q save other changes/exit (cancel deletion)\n"
             )
         status = self.status_message
@@ -246,32 +246,18 @@ class InteractiveTasks:
         self.status_message = ""
         self.invalidate()
 
-    def mark_completed(self) -> None:
+    def toggle_completion(self) -> None:
         task = self.selected_task()
         if task is None:
             self.status_message = "There are no tasks to select."
-        elif task["is_completed"]:
-            self.status_message = "That task is already completed."
         elif task["pending_delete"]:
             self.status_message = "Marked for deletion. Press Enter to delete it."
         else:
-            task["is_completed"] = 1
+            task["is_completed"] = int(not task["is_completed"])
             task["updated_at"] = storage.now_utc()
             self.dirty_ids.add(task["id"])
-            self.status_message = "Marked complete. Press Enter or q to save."
-        self.invalidate()
-
-    def mark_pending(self) -> None:
-        task = self.selected_task()
-        if task is None:
-            self.status_message = "There are no tasks to reopen."
-        elif not task["is_completed"]:
-            self.status_message = "That task is already pending."
-        else:
-            task["is_completed"] = 0
-            task["updated_at"] = storage.now_utc()
-            self.dirty_ids.add(task["id"])
-            self.status_message = "Marked pending. Press Enter or q to save."
+            state = "complete" if task["is_completed"] else "pending"
+            self.status_message = f"Marked {state}. Press Enter or q to save."
         self.invalidate()
 
     def mark_deleted(self) -> None:
@@ -436,12 +422,8 @@ class InteractiveTasks:
             self.move_selection(1)
 
         @bindings.add(" ", filter=list_mode)
-        def complete(event) -> None:
-            self.mark_completed()
-
-        @bindings.add("u", filter=list_mode)
-        def reopen(event) -> None:
-            self.mark_pending()
+        def toggle(event) -> None:
+            self.toggle_completion()
 
         @bindings.add("d", filter=list_mode)
         def delete(event) -> None:

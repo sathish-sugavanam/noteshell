@@ -23,8 +23,8 @@ task
 ```
 
 `task` opens the interactive list. Use Up and Down to select a task, Space to
-complete it, `u` to return a completed task to pending, Tab to edit it, and `a`
-to add a task. In the editor, Tab switches between the task and its optional due
+toggle it between pending and completed, Tab to edit it, and `a` to add a task.
+In the editor, Tab switches between the task and its optional due
 date. Enter saves and returns to the list; Escape cancels the edit. Due dates use
 the local time zone and the `YYYY-MM-DD HH:MM` format (for example,
 `2027-05-27 13:30`); leave the field blank to remove a due date. Use `d` to mark
