@@ -1,7 +1,7 @@
 [project]
 name = "terminal-note"
 version = "0.1.0"
-description = "A small terminal note manager with optional due dates"
+description = "A keyboard-driven terminal note manager"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

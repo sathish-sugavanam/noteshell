@@ -51,61 +51,43 @@ def open_database():
         connection.close()
 
 
-def add_note(text: str, due_at: str | None) -> int:
-    timestamp = now_utc()
+def save_note_changes(
+    changes: dict[int, tuple[str, bool, bool]], additions: tuple[str, ...] = ()
+) -> None:
+    """Save edits, completion states, soft deletions, and new notes together."""
+    if not changes and not additions:
+        return
     with open_database() as connection:
-        cursor = connection.execute(
-            "INSERT INTO notes (text, due_at, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            (text, due_at, timestamp, timestamp),
-        )
-        return cursor.lastrowid
+        for note_id, (text, is_completed, is_deleted) in changes.items():
+            timestamp = now_utc()
+            cursor = connection.execute(
+                "UPDATE notes SET text = ?, is_completed = ?, updated_at = ?, deleted_at = ? "
+                "WHERE id = ? AND deleted_at IS NULL",
+                (text, int(is_completed), timestamp, timestamp if is_deleted else None, note_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"note {note_id} no longer exists")
+        for text in additions:
+            timestamp = now_utc()
+            connection.execute(
+                "INSERT INTO notes (text, due_at, created_at, updated_at) "
+                "VALUES (?, NULL, ?, ?)",
+                (text, timestamp, timestamp),
+            )
 
 
-def set_due_date(note_id: int, due_at: str) -> bool:
-    with open_database() as connection:
-        cursor = connection.execute(
-            "UPDATE notes SET due_at = ?, updated_at = ? "
-            "WHERE id = ? AND is_completed = 0 AND deleted_at IS NULL",
-            (due_at, now_utc(), note_id),
-        )
-        return cursor.rowcount == 1
-
-
-def complete_note(note_id: int) -> bool:
-    with open_database() as connection:
-        cursor = connection.execute(
-            "UPDATE notes SET is_completed = 1, updated_at = ? "
-            "WHERE id = ? AND is_completed = 0 AND deleted_at IS NULL",
-            (now_utc(), note_id),
-        )
-        return cursor.rowcount == 1
-
-
-def get_note(note_id: int):
+def list_notes():
+    """Return all undeleted notes, pending first and completed notes last."""
     with open_database() as connection:
         return connection.execute(
-            "SELECT id, text, due_at, is_completed FROM notes "
-            "WHERE id = ? AND deleted_at IS NULL",
-            (note_id,),
-        ).fetchone()
-
-
-def list_notes(status: str):
-    """Return notes in the agreed pending/deadline and completed/update order."""
-    query = """
-        SELECT id, text, due_at, is_completed, updated_at
-        FROM notes
-        WHERE deleted_at IS NULL
-    """
-    if status == "p":
-        query += " AND is_completed = 0 ORDER BY due_at IS NULL, due_at, id"
-    elif status == "c":
-        query += " AND is_completed = 1 ORDER BY updated_at DESC, id DESC"
-    else:
-        query += " ORDER BY is_completed, " \
-                 "CASE WHEN is_completed = 0 THEN due_at IS NULL END, " \
-                 "CASE WHEN is_completed = 0 THEN due_at END, " \
-                 "CASE WHEN is_completed = 1 THEN updated_at END DESC, id"
-
-    with open_database() as connection:
-        return connection.execute(query).fetchall()
+            """
+            SELECT id, text, due_at, is_completed, updated_at
+            FROM notes
+            WHERE deleted_at IS NULL
+            ORDER BY is_completed,
+                CASE WHEN is_completed = 0 THEN due_at IS NULL END,
+                CASE WHEN is_completed = 0 THEN due_at END,
+                CASE WHEN is_completed = 1 THEN updated_at END DESC,
+                id
+            """
+        ).fetchall()

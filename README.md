@@ -1,8 +1,8 @@
 # note
 
-A small terminal note manager. Add notes with optional due dates, mark them
-complete, and view all notes or filter by status. Notes stay on your computer in
-a local SQLite database.
+A small keyboard-driven terminal note manager. Create, edit, complete, reopen,
+and delete notes from one interactive view. Notes stay on your computer in a
+local SQLite database.
 
 ## Install
 
@@ -19,29 +19,23 @@ tool directory to your `PATH`.
 ## Use
 
 ```sh
-note add "Pay electricity bill"
-note add "Submit report" --due
-note due 1
-note done 1
-note list
-note list p
-note list c
-note --help
+note
 ```
 
-The `--due` and `due` commands ask for a date in `YYYY-MM-DD` format and a time
-in 24-hour `HH:MM` format. The time prompt starts with an editable `00:00`.
-Invalid dates and times are requested again; Ctrl+C cancels without saving. Due
-dates use your computer's local timezone. Past deadlines are accepted and shown
-as overdue while a note is pending.
+`note` opens the interactive list. Use Up and Down to select a note, Space to
+complete it, `u` to return a completed note to pending, Tab to edit it, and `a`
+to add a note without a due date. Press `d` to mark a note for deletion; it is
+struck through until Enter saves the changes and deletes it. Enter also saves a
+new or edited note and exits. `q` saves other changes and exits, cancelling
+marked deletions. Escape cancels the current text edit, and Ctrl+C exits without
+saving staged changes.
 
-`note list` shows pending notes first, ordered by earliest due date and time,
-then pending notes without a due date. Completed notes follow, newest completion
-first. `note list p` shows only pending notes; `note list c` shows only completed
-notes. Completing an already completed note reports that it is already complete.
+The interactive list groups overdue notes in red, other pending notes in yellow,
+and completed notes in grey. Each group has a heading and divider. Notes with
+existing due dates appear in deadline order; adding or changing due dates is not
+available in this version of the interactive view.
 
 The database is `~/.local/share/note/notes.sqlite3`, or
 `$XDG_DATA_HOME/note/notes.sqlite3` when `XDG_DATA_HOME` is set. It includes
 `id`, `text`, `due_at`, `is_completed`, `created_at`, `updated_at`, and
-`deleted_at` fields. Deleted notes are reserved for future use; this version
-does not include delete commands.
+`deleted_at` fields. Deleted notes are hidden from future lists.
